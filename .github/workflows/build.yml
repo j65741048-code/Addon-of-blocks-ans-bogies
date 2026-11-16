@@ -18,8 +18,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # Installs Gradle itself, so gradlew / gradle-wrapper.jar are not needed in the repo.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.12.1'
 
       # Self-contained: no scripts/ folder needed in the repo.
       - name: Fetch Create Fabric 1.20.1 and its libraries
@@ -54,11 +57,8 @@ jobs:
           if [ -d build/nested/META-INF/jars ]; then cp -n build/nested/META-INF/jars/*.jar libs/ || true; fi
           ls -la libs
 
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
       - name: Build
-        run: ./gradlew build --stacktrace --no-daemon
+        run: gradle build --stacktrace --no-daemon
 
       - name: Upload mod jar
         uses: actions/upload-artifact@v4

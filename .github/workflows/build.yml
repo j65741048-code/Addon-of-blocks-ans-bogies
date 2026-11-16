@@ -1,4 +1,4 @@
-name: Build
+name: Build (Fabric 1.20.1)
 
 on:
   push:
@@ -21,8 +21,38 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Self-contained: no scripts/ folder needed in the repo.
       - name: Fetch Create Fabric 1.20.1 and its libraries
-        run: bash scripts/fetch-deps.sh
+        env:
+          CREATE_VERSION: 6.0.8.1+build.1744-mc1.20.1
+        run: |
+          set -uo pipefail
+          mkdir -p libs
+          UA="western-bogies-build (github actions)"
+          API="https://api.modrinth.com/v2/project"
+          Q='loaders=%5B%22fabric%22%5D&game_versions=%5B%221.20.1%22%5D'
+          fetch() {
+            local slug="$1" want="${2:-}" json url=""
+            json="$(curl -fsSL -H "User-Agent: $UA" "$API/$slug/version?$Q")" || { echo "WARN: cannot query $slug"; return 1; }
+            if [ -n "$want" ]; then
+              url="$(echo "$json" | jq -r --arg v "$want" '[.[]|select(.version_number==$v)][0].files|map(select(.primary))[0].url // empty')"
+            fi
+            if [ -z "$url" ]; then
+              url="$(echo "$json" | jq -r '([.[]|select(.version_type=="release")][0] // .[0]).files|map(select(.primary))[0].url // empty')"
+            fi
+            [ -n "$url" ] || { echo "WARN: no 1.20.1 fabric file for $slug"; return 1; }
+            echo "Downloading $slug -> $url"
+            curl -fsSL -H "User-Agent: $UA" -o "libs/$slug.jar" "$url"
+          }
+          fetch create-fabric "$CREATE_VERSION" || exit 1
+          fetch flywheel || true
+          fetch ponder || true
+          fetch catnip || true
+          # Extract Create's jar-in-jar libraries so the compiler can see them
+          mkdir -p build/nested
+          unzip -o -q libs/create-fabric.jar 'META-INF/jars/*.jar' -d build/nested 2>/dev/null || true
+          if [ -d build/nested/META-INF/jars ]; then cp -n build/nested/META-INF/jars/*.jar libs/ || true; fi
+          ls -la libs
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -33,7 +63,7 @@ jobs:
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
-          name: western-bogies
+          name: western-bogies-fabric-1.20.1
           path: |
             build/libs/*.jar
             !build/libs/*-sources.jar
@@ -44,7 +74,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-reports
-          path: |
-            build/reports
-            build/**/*.log
+          path: build/reports
           if-no-files-found: ignore

@@ -24,8 +24,21 @@ jobs:
         with:
           gradle-version: '8.12.1'
 
+      # Finds settings.gradle wherever it was uploaded (repo root or a subfolder).
+      - name: Locate Gradle project
+        run: |
+          f="$(find . -maxdepth 3 -name 'settings.gradle*' -not -path './.git/*' -not -path '*/libs/*' | head -n1)"
+          if [ -z "$f" ]; then
+            echo "::error::No settings.gradle found in this repo. Upload settings.gradle, build.gradle, gradle.properties and the src folder."
+            find . -not -path './.git/*' | head -60
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$f")" >> "$GITHUB_ENV"
+          echo "Gradle project found in: $(dirname "$f")"
+
       # Self-contained: no scripts/ folder needed in the repo.
       - name: Fetch Create Fabric 1.20.1 and its libraries
+        working-directory: ${{ env.PROJECT_DIR }}
         env:
           CREATE_VERSION: 6.0.8.1+build.1744-mc1.20.1
         run: |
@@ -58,6 +71,7 @@ jobs:
           ls -la libs
 
       - name: Build
+        working-directory: ${{ env.PROJECT_DIR }}
         run: gradle build --console=plain --no-daemon
 
       - name: Upload mod jar
@@ -65,8 +79,8 @@ jobs:
         with:
           name: western-bogies-fabric-1.20.1
           path: |
-            build/libs/*.jar
-            !build/libs/*-sources.jar
+            ${{ env.PROJECT_DIR }}/build/libs/*.jar
+            !${{ env.PROJECT_DIR }}/build/libs/*-sources.jar
           if-no-files-found: error
 
       - name: Upload build reports (on failure)
@@ -74,5 +88,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-reports
-          path: build/reports
+          path: ${{ env.PROJECT_DIR }}/build/reports
           if-no-files-found: ignore
